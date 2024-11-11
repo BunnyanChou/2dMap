@@ -1,24 +1,3 @@
-/**
-* This file is part of ORB-SLAM2.
-*
-* Copyright (C) 2014-2016 Raúl Mur-Artal <raulmur at unizar dot es> (University of Zaragoza)
-* For more information see <https://github.com/raulmur/ORB_SLAM2>
-*
-* ORB-SLAM2 is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
-*
-* ORB-SLAM2 is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
-*/
-
-
 #include<iostream>
 #include<algorithm>
 #include<fstream>
@@ -32,14 +11,18 @@
 #include "Map2D.h"
 #include "Converter.h"
 #include "SE3.h"
+#include "Converter.h"
 using namespace std;
 
 void LoadImages(const string &strFile, vector<string> &vstrImageFilenames,
                 vector<double> &vTimestamps);
 
 void InputGPS(const string &strFile, vector<vector<double>> &vGPS, vector<string> &vImageList);
+void InputGPS(const string &strFile, std::map<std::string, vector<double>>& imgGPS);
 
 bool obtainFrame(const cv::Mat im, const cv::Mat Twc, std::pair<cv::Mat, pi::SE3d>& frame);
+
+void SaveTrajectoryGPS(std::vector<cv::Mat> pose, std::string filename);
 
 int main(int argc, char **argv)
 {
@@ -56,25 +39,27 @@ int main(int argc, char **argv)
     LoadImages(strFile, vstrImageFilenames, vTimestamps);
 
     // load gps
-    // string strGPS = string(argv[3]) + "/gps.txt";
+    string strGPS = string(argv[3]) + "/trajectory.txt";
     // vector<string> vstrImageList;
     // vector<vector<double>> vGPSs;
     // InputGPS(strGPS, vGPSs, vstrImageList);
+    std::map<std::string, vector<double>> imgGPS;
+    InputGPS(strGPS, imgGPS);
 
-    // std::cout << "gps size " << vGPSs.size() << ", " << vGPSs[0][0] << std::endl;
-    // if (vstrImageList.size() != vstrImageFilenames.size()) {
-    //     cerr << "gps does not match image " << vstrImageList.size() << " v.s " << vstrImageFilenames.size() << std::endl;
-    //     return 1;
-    // }
+    std::cout << "gps size " << imgGPS.size() << std::endl;
+    if (imgGPS.size() != vstrImageFilenames.size()) {
+        cerr << "gps does not match image " << imgGPS.size() << " v.s " << vstrImageFilenames.size() << std::endl;
+        return 1;
+    }
 
     int nImages = vstrImageFilenames.size();
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR, true);
-    // ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR_GPS, true);
+    // ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR, true);
+    ORB_SLAM2::System SLAM(argv[1], argv[2], ORB_SLAM2::System::MONOCULAR_GPS, true);
 
     // 初始化Map2D
-    SPtr<Map2D> map=Map2D::create(Map2D::TypeMultiBandCPU, true); 
+    SPtr<Map2D> map=Map2D::create(Map2D::TypeMultiBandCPU, true); // TypeMultiBandCPU TypeCPU
     if(!map.get())
     {
         cerr<<"No map2d created!\n";
@@ -100,13 +85,23 @@ int main(int argc, char **argv)
     bool map_initialized = false;
     bool pop_first = false;
     deque<std::pair<cv::Mat,pi::SE3d>> frames;
-    cv::Mat im;
+    cv::Mat im, map2dcv;
+
+    std::vector<cv::Mat> resultGPS;
+    int firstIdx = 0;
+    int slamInitialized = false;
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image from file
+        std::cout << "Processing image: " << vstrImageFilenames[ni] << std::endl;
         im = cv::imread(string(argv[3])+"/"+vstrImageFilenames[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
         // vector<double> gps = vGPSs[ni];
+        vector<double> gps = imgGPS[vstrImageFilenames[ni]];
+        if (gps.size() == 0) {
+            std::cout << "No GPS is given" << std::endl;
+            return 1;
+        }
 
         if(im.empty())
         {
@@ -122,11 +117,17 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        cv::Mat Tcw = SLAM.TrackMonocular(im, tframe);
+        // cv::Mat Tcw = SLAM.TrackMonocular(im, tframe);
+        cv::Mat Tcw = SLAM.TrackMonocularGPS(im, gps, tframe);
         if (!Tcw.empty()) {
+            if (!slamInitialized) {
+                slamInitialized = true;
+                firstIdx = ni;
+            }
+            
             std::cout << "translation: " << Tcw.at<float>(0,3) << Tcw.at<float>(1,3) << Tcw.at<float>(2,3) << std::endl;
+            resultGPS.push_back(Tcw);
         }
-        
 
 #ifdef COMPILEDWITHC11
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -138,6 +139,9 @@ int main(int argc, char **argv)
 
         // 图像拼接
         // 前20张图片，加入到frame中去    
+        if (ni < (firstIdx + 2)) {
+            continue;
+        }
         if (!Tcw.empty() && ni < 20) {
             std::pair<cv::Mat,pi::SE3d> frame;
             (void)obtainFrame(im, Tcw, frame);
@@ -149,6 +153,9 @@ int main(int argc, char **argv)
                     cout << "Not enough frames. Loaded "<<frames.size()<<" frames.\n";
                     return 1;
                 }
+                std::pair<cv::Mat,pi::SE3d> frame;
+                (void)obtainFrame(im, Tcw, frame);
+                frames.push_back(frame);
                 map->prepare(pi::SE3d(), PinHoleParameters(im.cols, im.rows, fx, fy, cx, cy), frames);
                 map_initialized = true;
                 std::cout << "map_repare done." << std::endl;
@@ -164,6 +171,9 @@ int main(int argc, char **argv)
                 std::pair<cv::Mat,pi::SE3d> frame;
                 (void)obtainFrame(im, Tcw, frame);
                 map->feed(frame.first, frame.second);
+                map->drawFrame(map2dcv);
+                // map->save("/home/heda/zyy/dataset/phantom3_village-kfs/fused/map2D_gps" + std::to_string(ni) + ".png");
+                // map->draw();
 
                 // frames.push_back(frame);
                 // if (map->queueSize() < 2) {
@@ -207,13 +217,32 @@ int main(int argc, char **argv)
     cout << "mean tracking time: " << totaltime/nImages << endl;
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("/home/heda/zyy/dataset/data_test/fast_stitching/KeyFrameTrajectory.txt");
-    SLAM.SaveTrajectoryTUM("/home/heda/zyy/dataset/data_test/fast_stitching/FrameTrajectory.txt");
-    SLAM.SaveMap("/home/heda/zyy/dataset/data_test/fast_stitching/map.txt");
-    map->save("/home/heda/zyy/dataset/data_test/fast_stitching/map2D.png");
+    SLAM.SaveKeyFrameTrajectoryTUM("/home/heda/zyy/dataset/phantom3_village-kfs/KeyFrameTrajectory_cgps.txt");
+    SLAM.SaveTrajectoryTUM("/home/heda/zyy/dataset/phantom3_village-kfs/FrameTrajectory_cgps.txt");
+    SLAM.SaveMap("/home/heda/zyy/dataset/phantom3_village-kfs/map_gps.txt");
+    SaveTrajectoryGPS(resultGPS, "/home/heda/zyy/dataset/phantom3_village-kfs/FrameTrajectory_gps.txt");
+    map->save("/home/heda/zyy/dataset/phantom3_village-kfs/fused/map2D_gps.png");
     // Stop all threads
     SLAM.Shutdown();
     return 0;
+}
+
+void SaveTrajectoryGPS(std::vector<cv::Mat> pose, std::string filename) {
+    ofstream f;
+    f.open(filename.c_str());
+    f << fixed;
+
+    for(size_t i=0; i<pose.size(); i++)
+    {
+        cv::Mat R = pose[i].rowRange(0,3).colRange(0,3);
+        cv::Mat t = pose[i].rowRange(0,3).col(3);
+
+        vector<float> q = ORB_SLAM2::Converter::toQuaternion(R);
+
+        f << setprecision(6) << i << " " <<  setprecision(9) << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2) << " " <<q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+    }
+    f.close();
+    cout << endl << "trajectory saved!" << endl;
 }
 
 void LoadImages(const string &strFile, vector<string> &vstrImageFilenames, vector<double> &vTimestamps)
@@ -245,6 +274,36 @@ void LoadImages(const string &strFile, vector<string> &vstrImageFilenames, vecto
     }
 }
 
+void InputGPS(const string &strFile, std::map<std::string, vector<double>>& imgGPS) {
+    ifstream f;
+    f.open(strFile.c_str());
+
+    // skip first three lines
+    string s0;
+    
+    while(!f.eof())
+    {
+        string s;
+        getline(f,s);
+        if(!s.empty())
+        {
+            stringstream ss;
+            ss << s;
+            string sRGB;
+            ss >> sRGB;
+            // vImageList.push_back(sRGB);
+
+            double x, y, z;
+            ss >> x;
+            ss >> y;
+            ss >> z;
+            vector<double> tmp{x, y, z};
+            imgGPS["rgb/" + sRGB + ".jpg"] = tmp;
+            // std::cout << "        " << vGPS[vGPS.size() - 1][0] << ", "  << vGPS[vGPS.size() - 1][1] << ", " << vGPS[vGPS.size() - 1][2] << std::endl;
+        }
+        // initGPS = true;
+    }
+}
 void InputGPS(const string &strFile, vector<vector<double>> &vGPS, vector<string> &vImageList)
 {
     ifstream f;
@@ -252,11 +311,11 @@ void InputGPS(const string &strFile, vector<vector<double>> &vGPS, vector<string
 
     // skip first three lines
     string s0;
-    getline(f,s0);
-    getline(f,s0);
+    // getline(f,s0);
+    // getline(f,s0);
 
-    GeographicLib::LocalCartesian geoConverter(22.792117, 114.685813, 127.586000);
-    bool initGPS = false;
+    // GeographicLib::LocalCartesian geoConverter(22.792117, 114.685813, 127.586000);
+    // bool initGPS = false;
     while(!f.eof())
     {
         string s;
@@ -269,29 +328,36 @@ void InputGPS(const string &strFile, vector<vector<double>> &vGPS, vector<string
             ss >> sRGB;
             vImageList.push_back(sRGB);
 
-            double latitude; 
-            double longitude; 
-            double altitude;
-            double posAccuracy;
-            ss >> longitude;
-            ss >> latitude;
-            ss >> altitude;
-            ss >> posAccuracy;
-            double xyz[3];
+            // double latitude; 
+            // double longitude; 
+            // double altitude;
+            // double posAccuracy;
+            // ss >> longitude;
+            // ss >> latitude;
+            // ss >> altitude;
+            // ss >> posAccuracy;
+
+            // double xyz[3];
 
             // convert gps from wgs84 to enu
-            if(!initGPS)
-            {
-                geoConverter.Reset(latitude, longitude, altitude);
-            }
-            geoConverter.Forward(latitude, longitude, altitude, xyz[0], xyz[1], xyz[2]);
-            vector<double> tmp{xyz[0], xyz[1], xyz[2], posAccuracy};
-            std::cout << sRGB << ", " << latitude << ", "  << longitude << ", " << altitude << std::endl;
-            std::cout << "        " << xyz[0] << ", "  << xyz[1] << ", " << xyz[2] << std::endl;
+            // if(!initGPS)
+            // {
+            //     geoConverter.Reset(latitude, longitude, altitude);
+            // }
+            // geoConverter.Forward(latitude, longitude, altitude, xyz[0], xyz[1], xyz[2]);
+            // vector<double> tmp{xyz[0], xyz[1], xyz[2], posAccuracy};
+            // std::cout << sRGB << ", " << latitude << ", "  << longitude << ", " << altitude << std::endl;
+            // std::cout << "        " << xyz[0] << ", "  << xyz[1] << ", " << xyz[2] << std::endl;
+
+            double x, y, z;
+            ss >> x;
+            ss >> y;
+            ss >> z;
+            vector<double> tmp{x, y, z};
             vGPS.push_back(tmp);
-            std::cout << "        " << vGPS[vGPS.size() - 1][0] << ", "  << vGPS[vGPS.size() - 1][1] << ", " << vGPS[vGPS.size() - 1][2] << std::endl;
+            // std::cout << "        " << vGPS[vGPS.size() - 1][0] << ", "  << vGPS[vGPS.size() - 1][1] << ", " << vGPS[vGPS.size() - 1][2] << std::endl;
         }
-        initGPS = true;
+        // initGPS = true;
     }
 }
 
@@ -301,10 +367,17 @@ bool obtainFrame(const cv::Mat im, const cv::Mat Tcw, std::pair<cv::Mat, pi::SE3
         return false;
     }
 
-    cv::Mat mRcw = Tcw.rowRange(0,3).colRange(0,3);
-    cv::Mat mRwc = mRcw.t();
-    cv::Mat mtcw = Tcw.rowRange(0,3).col(3);
-    cv::Mat mtwc = -mRcw.t() * mtcw;
+    // cv::Mat mRcw = Tcw.rowRange(0,3).colRange(0,3);
+    // cv::Mat mRwc = mRcw.t();
+    // cv::Mat mtcw = Tcw.rowRange(0,3).col(3);
+    // cv::Mat mtwc = -mRcw.t() * mtcw;
+
+    // GPS时格式时反过来的
+    cv::Mat mRwc = Tcw.rowRange(0,3).colRange(0,3);
+    cv::Mat mtwc = Tcw.rowRange(0,3).col(3);
+
+    std::cout << "mRwc: " << mRwc << std::endl;
+    std::cout << "mtwc: " << mtwc << std::endl;
 
     Eigen::Matrix<double,3,3> eigMat = ORB_SLAM2::Converter::toMatrix3d(mRwc);
     Eigen::Quaterniond r(eigMat);

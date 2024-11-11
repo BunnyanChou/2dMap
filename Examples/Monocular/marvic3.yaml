@@ -5,18 +5,19 @@
 #--------------------------------------------------------------------------------------------
 
 # Camera calibration and distortion parameters (OpenCV) 
-Camera.fx: 1220.0 #2080 #1158.85484
-Camera.fy: 1220.0 #2080 #1158.85484
-Camera.cx: 960 #740
-Camera.cy: 540
+Camera.fx: 1589.44394 #4231.17608
+Camera.fy: 1589.44394 #4231.17608
+Camera.cx: 960.0 #2728.90199
+Camera.cy: 540.0 #1838.8304
 
-# Camera.k1: -0.0157305465
-# Camera.k2: 0.3913
-# Camera.p1: 0.00102105
-# Camera.p2: -0.000789922
-# Camera.k3: -1.37206
-# Camera.b1: -2.58705
-# Camera.b2: -0.200445
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+# Camera.k2: -0.187204
+# Camera.p1: -0.000498569
+# Camera.p2: 0.0017455
+# Camera.k3: 0.223892
 
 # Camera frames per second 
 Camera.fps: 10.0
@@ -41,8 +42,8 @@ ORBextractor.nLevels: 8
 # Image is divided in a grid. At each cell FAST are extracted imposing a minimum response.
 # Firstly we impose iniThFAST. If no corners are detected we impose a lower value minThFAST
 # You can lower these values if your images have low contrast			
-ORBextractor.iniThFAST: 20
-ORBextractor.minThFAST: 5 #7
+ORBextractor.iniThFAST: 20 #20
+ORBextractor.minThFAST: 7 #7
 
 #--------------------------------------------------------------------------------------------
 # Viewer Parameters

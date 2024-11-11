@@ -52,9 +52,9 @@ class MultiBandMap2DCPU:public Map2D,public pi::Thread
 
     struct MultiBandMap2DCPUData//change when spread and prepare
     {
-        MultiBandMap2DCPUData():_w(0),_h(0){}
+        MultiBandMap2DCPUData():_w(0),_h(0),_minIntx(0),_minInty(0){}
         MultiBandMap2DCPUData(double eleSize_,double lengthPixel_,pi::Point3d max_,pi::Point3d min_,
-                     int w_,int h_,const std::vector<SPtr<MultiBandMap2DCPUEle> >& d_);
+                     int w_,int h_,int minIntx_, int minInty_, const std::vector<SPtr<MultiBandMap2DCPUEle> >& d_);
 
         bool   prepare(SPtr<MultiBandMap2DCPUPrepare> prepared);// only done Once!
 
@@ -67,6 +67,8 @@ class MultiBandMap2DCPU:public Map2D,public pi::Thread
         const pi::Point3d& max()const{return _max;}
         const int w()const{return _w;}
         const int h()const{return _h;}
+        const int minIntx()const{return _minIntx;}
+        const int minInty()const{return _minInty;}
 
         std::vector<SPtr<MultiBandMap2DCPUEle> > data()
         {pi::ReadMutex lock(mutexData);return _data;}
@@ -88,7 +90,8 @@ class MultiBandMap2DCPU:public Map2D,public pi::Thread
         pi::Point3d _gpsOrigin;
         pi::Point3d _max,_min;
         int         _w,_h;
-        std::vector<SPtr<MultiBandMap2DCPUEle> >  _data;
+        int _minIntx, _minInty;
+        std::vector<SPtr<MultiBandMap2DCPUEle>>  _data;
         pi::MutexRW mutexData;
     };
 
@@ -104,7 +107,7 @@ public:
     virtual bool feed(cv::Mat img,const pi::SE3d& pose);//world coordinate
 
     // virtual void draw();
-
+    virtual bool drawFrame(cv::Mat &stitchImage);
     virtual bool save(const std::string& filename);
 
     virtual uint queueSize(){
@@ -130,5 +133,6 @@ private:
     cv::Mat                           weightImage;
     // int                               &alpha,_bandNum,&_highQualityShow;
     int                               alpha,_bandNum,_highQualityShow;
+    // cv::Mat                           stitchImage;
 };
 #endif // MULTIBANDMap2DCPU_H

@@ -95,6 +95,7 @@ public:
     inline cv::Mat GetGPSPose(){
         cv::Mat mRgpsw = GetGPSRotation();
         cv::Mat mtgpsw = GetGPSPosition();
+        mTcw_sensor = cv::Mat::eye(4, 4, CV_32F);
         mRgpsw.copyTo(mTcw_sensor.rowRange(0,3).colRange(0,3));
         mtgpsw.copyTo(mTcw_sensor.rowRange(0,3).col(3));
         return mTcw_sensor;

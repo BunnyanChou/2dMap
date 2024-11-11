@@ -89,6 +89,7 @@ public:
     virtual bool feed(cv::Mat img,const pi::SE3d& pose){return false;}
 
     virtual void draw(){}
+    virtual bool drawFrame(cv::Mat &stitchImagetestzyhhh){return false;}
 
     virtual bool save(const std::string& filename){return false;}
 

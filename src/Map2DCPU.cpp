@@ -28,7 +28,8 @@
 // #include <gui/gl/SignalHandle.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-
+// #include <pangolin/pangolin.h>
+// #include "Converter.h"
 using namespace std;
 
 
@@ -88,7 +89,6 @@ bool Map2DCPU::Map2DCPUData::prepare(SPtr<Map2DCPUPrepare> prepared)
             _max.x=_min.x+_eleSize*_w;
             _max.y=_min.y+_eleSize*_h;
             _data.resize(_w*_h);
-            std::cout << "w = " << _w << ", h = " << _h << ", _max.x = " << _max.x << ", _max.y = " << _max.y << std::endl;
         }
     }
     return true;
@@ -110,7 +110,7 @@ Map2DCPU::Map2DCPU(bool thread)
 bool Map2DCPU::prepare(const pi::SE3d& plane1,const PinHoleParameters& camera,
                 const std::deque<std::pair<cv::Mat,pi::SE3d> >& frames)
 {
-    pi::SE3d plane(0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0); // 0.33, -0.038, 0.997, 0.0, 0.0, 0.99998, 0.00609
+    pi::SE3d plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0); // 0.33, -0.038, 0.997, 0.0, 0.0, 0.99998, 0.00609 x, y, z, qx, qy, qz,qw
     //insert frames
     SPtr<Map2DCPUPrepare> p(new Map2DCPUPrepare);
     SPtr<Map2DCPUData>    d(new Map2DCPUData);
@@ -123,7 +123,7 @@ bool Map2DCPU::prepare(const pi::SE3d& plane1,const PinHoleParameters& camera,
             data=d;
             weightImage.release();
             if(_thread&&!isRunning()) {
-                start();
+                start(); 
             }  
             _valid=true;
             return true;
@@ -151,17 +151,14 @@ bool Map2DCPU::feed(cv::Mat img,const pi::SE3d& pose)
         if(p->_frames.size()>20) {
             p->_frames.pop_front(); // 元素超过20,就把队首的元素删掉， 为什么？
         }
-        std::cout << "In feed: " << p->_frames.size() << std::endl;
         return true;
     } else {
-        std::cout << "In feed renderFrame " << std::endl; // 
         return renderFrame(frame);
     }
 }
 
 bool Map2DCPU::renderFrame(const std::pair<cv::Mat,pi::SE3d>& frame)
 {
-    std::cout << "In renderFrame" << std::endl;
     SPtr<Map2DCPUPrepare> p;
     SPtr<Map2DCPUData>    d;
     {
@@ -401,9 +398,70 @@ bool Map2DCPU::spreadMap(double xmin,double ymin,double xmax,double ymax)
         data=SPtr<Map2DCPUData>(new Map2DCPUData(d->eleSize(),d->lengthPixel(),
                                                  pi::Point3d(max.x, max.y, d->max().z),
                                                  pi::Point3d(min.x, min.y, d->min().z),
-                                                 w, h, dataCopy));
+                                                 w, h, xminInt, yminInt, dataCopy));
     }
     pi::timer.leave("Map2DCPU::spreadMap");
+    return true;
+}
+
+bool Map2DCPU::drawFrame(cv::Mat &stitchImage)
+{
+    if (!_valid) return false;
+    SPtr<Map2DCPUPrepare> p;
+    SPtr<Map2DCPUData>    d;
+    {
+        pi::ReadMutex lock(mutex);
+        p=prepared;
+        d=data;
+    }
+
+    // cv::Mat stitchImagetest;
+    if(stitchImage.empty()) {
+        stitchImage.create(d->h()*ELE_PIXELS,d->w()*ELE_PIXELS,CV_8UC4);
+    } else if (stitchImage.cols != d->w()*ELE_PIXELS || stitchImage.rows != d->h()*ELE_PIXELS) { //地图发生了扩张
+        // 扩张之前图像old和现在的图像new之间的对应关系 扩张时dataCopy[x-xminInt + (y-yminInt) * w] = dataOld[x + y * d->w()];
+        // 求xminInt和yminInt
+        cv::Mat spreadMapmat(d->h()*ELE_PIXELS, d->w()*ELE_PIXELS, CV_8UC4);
+        int xminInt = d->minIntx();
+        int yminInt = d->minInty();
+        int w = stitchImage.cols;
+        int h = stitchImage.rows;
+        int newW = min((xminInt+d->w())*ELE_PIXELS, w);
+        int newH = min((yminInt+d->h())*ELE_PIXELS, h);
+        stitchImage.copyTo(spreadMapmat(cv::Rect(-xminInt*ELE_PIXELS,-yminInt*ELE_PIXELS,newW,newH)));
+        stitchImage = spreadMapmat.clone();
+    }
+    std::vector<SPtr<Map2DCPUEle>> dataCopy=d->data();
+    int wCopy=d->w(),hCopy=d->h();
+    for(int x=0;x<wCopy;x++)
+    {
+        for(int y=0;y<hCopy;y++)
+        {
+            int idxData=y*wCopy+x;
+            float x0=d->min().x+x*d->eleSize();
+            float y0=d->min().y+y*d->eleSize();
+            float x1=x0+d->eleSize();
+            float y1=y0+d->eleSize();
+            SPtr<Map2DCPUEle> ele=dataCopy[idxData];
+            if(!ele.get())  continue;
+            if(ele->img.empty()) continue;
+            // if(ele->texName==0)
+            // {
+            //     glGenTextures(1, &ele->texName);
+            // }
+            if(ele->Ischanged)
+            {
+                pi::ReadMutex lock1(ele->mutexData);
+                ele->img.copyTo(stitchImage(cv::Rect(ELE_PIXELS*(x),ELE_PIXELS*(y),ELE_PIXELS,ELE_PIXELS)));
+                ele->Ischanged=false;
+            }
+        }
+    }
+    cv::Mat img_resized;
+    cv::resize(stitchImage, img_resized, cv::Size(stitchImage.cols/8, stitchImage.rows/8), 0, 0, cv::INTER_AREA);
+    cv::imshow("Map2DCPU Visualization", img_resized);
+
+    cv::waitKey(30);  // 确保图像刷新
     return true;
 }
 
@@ -451,7 +509,18 @@ void Map2DCPU::run()
 //     }
 //     glMatrixMode(GL_MODELVIEW);
 //     glPushMatrix();
-//     glMultMatrix(p->_plane);
+
+//     cv::Mat planeMat = cv::Mat::eye(4,4,CV_64F);
+//     double r[12];
+//     p->_plane.getMatrix(r);
+//     for(int i=0;i<3;i++)
+//     {
+//         for(int j=0;j<4;j++)
+//         {
+//             planeMat.at<double>(i,j)=r[i*4+j];
+//         }
+//     }
+//     glMultMatrixd(planeMat.ptr<GLdouble>(0));
 //     //draw deque frames
 //     pi::TicTac ticTac;
 //     ticTac.Tic();
@@ -462,15 +531,19 @@ void Map2DCPU::run()
 //         for(std::deque<std::pair<cv::Mat,pi::SE3d> >::iterator it=frames.begin();it!=frames.end();it++)
 //         {
 //             pi::SE3d& pose=it->second;
+//             pi::Point3d trans = pose.get_translation();
+//             pi::Point3d axis_x = pose*pi::Point3d(1,0,0);
+//             pi::Point3d axis_y = pose*pi::Point3d(0,1,0);
+//             pi::Point3d axis_z = pose*pi::Point3d(0,0,1);
 //             glColor3ub(255,0,0);
-//             glVertex(pose.get_translation());
-//             glVertex(pose*pi::Point3d(1,0,0));
+//             glVertex3d(trans.x, trans.y, trans.z);
+//             glVertex3d(axis_x.x, axis_x.y, axis_x.z);
 //             glColor3ub(0,255,0);
-//             glVertex(pose.get_translation());
-//             glVertex(pose*pi::Point3d(0,1,0));
+//             glVertex3d(trans.x, trans.y, trans.z);
+//             glVertex3d(axis_y.x, axis_y.y, axis_y.z);
 //             glColor3ub(0,0,255);
-//             glVertex(pose.get_translation());
-//             glVertex(pose*pi::Point3d(0,0,1));
+//             glVertex3d(trans.x, trans.y, trans.z);
+//             glVertex3d(axis_z.x, axis_z.y, axis_z.z);
 //         }
 //         glEnd();
 //     }

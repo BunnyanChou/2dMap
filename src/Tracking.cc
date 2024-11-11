@@ -307,7 +307,24 @@ cv::Mat Tracking::GrabImageMonocularGPS(const cv::Mat &im, const vector<double> 
     }
     Track();
 
-    return mCurrentFrame.mTcw.clone();
+    // return mCurrentFrame.mTcw.clone();
+    if (!mCurrentFrame.mTcw.empty()) {
+        cv::Mat Tgpsc = mCurrentFrame.GetGPSPose();
+        std::cout << "Tgpsc: " << Tgpsc << std::endl;
+        return Tgpsc;
+        // cv::Mat mRgpsc = Tgpsc.rowRange(0,3).colRange(0,3);
+        // cv::Mat mRcgps = mRgpsc.t();
+        // cv::Mat mtgpsc = Tgpsc.rowRange(0,3).col(3);
+        // cv::Mat mtcgps = -mRgpsc.t() * mtgpsc;
+
+        // cv::Mat mTcgps = cv::Mat::eye(4, 4, CV_32F);;
+        // mRcgps.copyTo(mTcgps.rowRange(0,3).colRange(0,3));
+        // mtcgps.copyTo(mTcgps.rowRange(0,3).col(3));
+        // return mTcgps;
+    } else {
+        cv::Mat mTcgps;
+        return mTcgps;
+    }
 }
 
 void Tracking::Track()
@@ -369,6 +386,7 @@ void Tracking::Track()
             }
             else
             {
+                std::cout << "Relocalization()" << std::endl;
                 bOK = Relocalization();
             }
         }
@@ -452,8 +470,7 @@ void Tracking::Track()
             if(bOK) {
                 std::cout << "TrackLocalMap" << std::endl;
                 bOK = TrackLocalMap();
-            }
-                
+            }      
         } else {
             // mbVO true means that there are few matches to MapPoints in the map. We cannot retrieve
             // a local map and therefore we do not perform TrackLocalMap(). Once the system relocalizes
@@ -464,11 +481,15 @@ void Tracking::Track()
             }            
         }
 
-        if(bOK)
+        if(bOK) {
             mState = OK;
-        else
-            mState=LOST;
-
+            std::cout << "Track status: OK" << std::endl;
+        }
+        else {
+            mState = LOST;
+            std::cout << "Track status: LOST" << std::endl;
+        }
+            
         // Update drawer
         mpFrameDrawer->Update(this);
 
@@ -557,15 +578,17 @@ void Tracking::Track()
         mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
         mlbLost.push_back(mState==LOST);
 
-        // cv::Mat Rgps_est = mCurrentFrame.GetGPSRotation();
-        // cv::Mat posgps_est = mCurrentFrame.GetGPSPosition();
-        // // std::cout << "mTgps_from_w: " << mTgps_from_w << std::endl;
-        // std::cout << "camera twc: " << mCurrentFrame.GetCameraCenter() << std::endl;
-        // std::cout << "mTgps_from_w.R: " << mTgps_from_w.rowRange(0,3).colRange(0,3) << std::endl;
-        // // std::cout << "mOw" << mCurrentFrame.mOw << std::endl;
-        // std::cout << "mTgps_from_w.t: " << mTgps_from_w.rowRange(0,3).col(3) << std::endl;
-        // std::cout << "after optim. posgps_est: " << posgps_est << std::endl;
-        // std::cout << "after optim. gps: " << mCurrentFrame.mTgpsc.rowRange(0, 3).col(3) << std::endl;     
+        if(mSensor==System::MONOCULAR_GPS) {
+            cv::Mat Rgps_est = mCurrentFrame.GetGPSRotation();
+            cv::Mat posgps_est = mCurrentFrame.GetGPSPosition();
+            // std::cout << "mTgps_from_w: " << mTgps_from_w << std::endl;
+            std::cout << "camera twc: " << mCurrentFrame.GetCameraCenter() << std::endl;
+            std::cout << "mTgps_from_w.R: " << mTgps_from_w.rowRange(0,3).colRange(0,3) << std::endl;
+            // std::cout << "mOw" << mCurrentFrame.mOw << std::endl;
+            std::cout << "mTgps_from_w.t: " << mTgps_from_w.rowRange(0,3).col(3) << std::endl;
+            std::cout << "after optim. posgps_est: " << posgps_est << std::endl;
+            std::cout << "after optim. gps: " << mCurrentFrame.mTgpsc.rowRange(0, 3).col(3) << std::endl;
+        }      
     }
     else
     {
@@ -840,7 +863,7 @@ void Tracking::CreateInitialMapMonocular()
     float medianDepth = pKFini->ComputeSceneMedianDepth(2);
     float invMedianDepth = 1.0f/medianDepth;
 
-    if(medianDepth<0 || pKFcur->TrackedMapPoints(1)<100)
+    if(medianDepth<0 || pKFcur->TrackedMapPoints(1)<90) // 100 初始化时跟踪的点数
     {
         cout << "Wrong initialization, reseting..." << endl;
         Reset();
@@ -1039,7 +1062,7 @@ bool Tracking::TrackWithMotionModel()
     if(nmatches<20)
     {
         fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
-        nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
+        nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);//2
     }
 
     if(nmatches<20)
@@ -1211,7 +1234,7 @@ bool Tracking::NeedNewKeyFrame()
     // Check how many "close" points are being tracked and how many could be potentially created.
     int nNonTrackedClose = 0;
     int nTrackedClose= 0;
-    if(mSensor!=System::MONOCULAR)
+    if(mSensor!=System::MONOCULAR || mSensor!=System::MONOCULAR_GPS)
     {
         for(int i =0; i<mCurrentFrame.N; i++)
         {
@@ -1232,7 +1255,7 @@ bool Tracking::NeedNewKeyFrame()
     if(nKFs<2)
         thRefRatio = 0.4f;
 
-    if(mSensor==System::MONOCULAR)
+    if(mSensor==System::MONOCULAR || mSensor==System::MONOCULAR_GPS)
         thRefRatio = 0.9f;
 
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
@@ -1240,7 +1263,7 @@ bool Tracking::NeedNewKeyFrame()
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);
     //Condition 1c: tracking is weak
-    const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;
+    const bool c1c =  (mSensor!=System::MONOCULAR || mSensor!=System::MONOCULAR_GPS) && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);
 
@@ -1256,7 +1279,7 @@ bool Tracking::NeedNewKeyFrame()
         else
         {
             mpLocalMapper->InterruptBA();
-            if(mSensor!=System::MONOCULAR)
+            if(mSensor!=System::MONOCULAR ||  mSensor!=System::MONOCULAR_GPS)
             {
                 if(mpLocalMapper->KeyframesInQueue()<3)
                     return true;
@@ -1281,7 +1304,7 @@ void Tracking::CreateNewKeyFrame()
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
 
-    if(mSensor!=System::MONOCULAR)
+    if(mSensor!=System::MONOCULAR || mSensor!=System::MONOCULAR_GPS)
     {
         mCurrentFrame.UpdatePoseMatrices();
 

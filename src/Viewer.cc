@@ -35,7 +35,7 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
     float fps = fSettings["Camera.fps"];
     if(fps<1)
         fps=30;
-    mT = 1e3/fps;
+    mT = 1e3/fps; // 从配置文件中读取相机帧率，计算帧间隔
 
     mImageWidth = fSettings["Camera.width"];
     mImageHeight = fSettings["Camera.height"];
@@ -43,12 +43,12 @@ Viewer::Viewer(System* pSystem, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer
     {
         mImageWidth = 640;
         mImageHeight = 480;
-    }
+    } // 获取图像的宽高
 
     mViewpointX = fSettings["Viewer.ViewpointX"];
     mViewpointY = fSettings["Viewer.ViewpointY"];
     mViewpointZ = fSettings["Viewer.ViewpointZ"];
-    mViewpointF = fSettings["Viewer.ViewpointF"];
+    mViewpointF = fSettings["Viewer.ViewpointF"]; // 获取视点图的位置
 }
 
 void Viewer::Run()
@@ -56,7 +56,7 @@ void Viewer::Run()
     mbFinished = false;
     mbStopped = false;
 
-    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",1024,768);
+    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",1024,768); // 窗口
 
     // 3D Mouse handler requires depth testing to be enabled
     glEnable(GL_DEPTH_TEST);
@@ -71,9 +71,9 @@ void Viewer::Run()
     pangolin::Var<bool> menuShowKeyFrames("menu.Show KeyFrames",true,true);
     pangolin::Var<bool> menuShowGraph("menu.Show Graph",true,true);
     pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode",false,true);
-    pangolin::Var<bool> menuReset("menu.Reset",false,false);
+    pangolin::Var<bool> menuReset("menu.Reset",false,false);  // 设置面板和菜单变量
 
-    // Define Camera Render Object (for view / scene browsing)
+    // Define Camera Render Object (for view / scene browsing) 定义相机渲染状态，包括视角和视图方向
     pangolin::OpenGlRenderState s_cam(
                 pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
@@ -92,7 +92,7 @@ void Viewer::Run()
     bool bFollow = true;
     bool bLocalizationMode = false;
 
-    while(1)
+    while(1) // 循环开始
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

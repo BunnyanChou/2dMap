@@ -7,10 +7,6 @@ import csv
 from sklearn.linear_model import RANSACRegressor
 from sklearn.linear_model import LinearRegression
 
-def new_csv():
-    with open("pcltest.csv", "w") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerows([[1, 2, 3, 4, ',']])
 
 def getData(filepath, row_need=1000):
     map_points = []
@@ -18,7 +14,7 @@ def getData(filepath, row_need=1000):
     with open(filepath, 'r') as f:
         lines = f.readlines()
         lines = [line.strip() for line in lines]
-        for line in lines:
+        for line in lines[1:]:
             cleaned_data = ''.join(filter(lambda x: x.isprintable(), line))
             _, x, y, z = cleaned_data.split()
             x = float(x)
@@ -26,101 +22,6 @@ def getData(filepath, row_need=1000):
             z = float(z)   
             map_points.append([x, y, z])
     return np.array(map_points)
-
-def solve_plane(A, B, C):
-    # 两个常量
-    N = np.array([0, 0, 1])
-    Pi = 3.1415926535
-    
-    # 计算平面的单位法向量，即BC与BA的叉积
-    Nx = np.cross(B - C, B - A)
-    Nx = Nx / np.linalg.norm(Nx)
-    
-    # 计算单位选择向量与旋转角（范围0到pi）
-    Nv = np.cross(Nx, N)
-    angle = acos(np.dot(Nx, N))
-    
-    # 考虑到两个向量夹角不大于Pi / 2, 这里需要处理一下
-    if angle > Pi / 2.0:
-        angle = Pi - angle
-        Nv = -Nv
-    
-    # 确定平面上一个点
-    Point = B
-    # 计算四元数
-    Quaternion = np.append(Nv * sin(angle / 2), cos(angle / 2))
-    
-    return Point, Quaternion, Nx
-
-def solve_distance(M, P, N):
-    """
-    求解点M到平面（P， Q）的距离
-    """
-    A = N[0]
-    B = N[1]
-    C = N[2]
-    D = -A * P[0] - B * P[1] - C * P[2]
-    
-    return fabs(A * M[0] + B * M[1] + C * M[2] + D) / sqrt(A ** 2 + B ** 2 + C ** 2)
-
-def RANSAC(data):
-    SIZE = data.shape[0]
-    
-    iters = 10000
-    sigma = 0.15
-    pretotal = 0
-    per = 0.999
-    P = np.array([])
-    Q = np.array([])
-    N = np.array([])
-    for i in range(iters):
-        sample_index = random.sample(range(SIZE), 3)
-        P, Q, N = solve_plane(data[sample_index[0]], data[sample_index[1]], data[sample_index[2]])
-        
-        # 算出内点数目
-        total_inlier = 0
-        for index in range(SIZE):
-            if solve_distance(data[index], P, N) < sigma:
-                total_inlier = total_inlier + 1
-                
-        if  total_inlier > pretotal:
-            # print(total_inlier / SIZE)
-            iters = log(1 - per) / log(1 - pow(abs(total_inlier / SIZE), 2))
-            pretotal = total_inlier
-        
-        if total_inlier > SIZE / 2:
-            break
-    return P, Q, N
-
-def draw(data, A_plane, B_plane, D_plane):
-    fig = plt.figure()
-    ax = Axes3D(fig)
-    
-    ax.scatter(data[0], data[1], data[2], c="gold")
-    
-    x = np.linspace(data[0].min(), data[0].max(), 10)
-    y = np.linspace(data[1].min(), data[1].max(), 10)
-    X, Y = np.meshgrid(x, y)
-    # Z = -(N[0] * X + N[1] * Y - (N[0] * P[0] + N[1] * P[1] + N[2] * P[2])) / N[2]
-    Z = A_plane * X + B_plane * Y + D_plane
-    # ax.plot_surface(X, Y, Z)
-    
-    ax.set_xlabel('X label')
-    ax.set_ylabel('Y label')
-    ax.set_zlabel('Z label')
-    
-    # plt.show()
-    plt.savefig("/home/heda/zyy/dataset/phantom3_village-kfs/plane.jpg")
-    
-def test():
-    A = np.random.randn(3)
-    B = np.random.randn(3)
-    C = np.random.randn(3)
-    
-    P, Q, N = solve_plane(A, B, C)
-    
-    D = np.random.randn(3)
-    d = solve_distance(D, P, N)
 
 def rotation_matrix_to_quaternion(R):
     q = np.zeros(4)
@@ -159,6 +60,28 @@ def quaternion_to_rotation_matrix(q):
     ])
     return R
 
+def plane_to_SE3_2(A, B, D):
+    n = np.array([A, B, -1])
+    n = n / np.linalg.norm(n)
+    
+    # 生成一个不平行与n的向量
+    if np.allclose(n, [1, 0, 0]):
+        v = np.array([0, 1, 0])
+    else:
+        v = np.array([1, 0, 0])
+        
+    # 计算x轴和y轴
+    x_axis = np.cross(v, n)
+    x_axis /= np.linalg.norm(x_axis)
+    y_axis = np.cross(n, x_axis)
+    
+    # 组合旋转矩阵R
+    R = np.vstack((x_axis, y_axis, n)).T
+    t = -D * n
+    q = rotation_matrix_to_quaternion(R)
+    print("q = ", q)
+    print("t = ", t)
+    
 def plane_to_SE3(A, B, D):
     # 法向量
     normal = np.array([A, B, -1])
@@ -168,7 +91,7 @@ def plane_to_SE3(A, B, D):
     point_on_plane = np.array([0, 0, D])
 
     # 计算旋转矩阵
-    z_axis = np.array([0, 0, 1])
+    z_axis = np.array([0, 0, 1]) # 不平行与法向量n的项链为z轴
     v = np.cross(normal_unit, z_axis)
     c = np.dot(normal_unit, z_axis)
     s = np.linalg.norm(v)
@@ -187,6 +110,7 @@ def plane_to_SE3(A, B, D):
 
     # 平移向量
     t = point_on_plane
+    # t = - D * normal_unit
 
     # 构建 SE(3)
     SE3 = np.eye(4)
@@ -219,6 +143,7 @@ def estimate_plane():
     print(f"平面参数: z = {slope_x} * x + {slope_y} * y + {intercept}")
     
     plane_to_SE3(slope_x, slope_y, intercept)
+    plane_to_SE3_2(slope_x, slope_y, intercept)
 
     # P, Q, N = RANSAC(data)
     # draw(points.T, slope_x, slope_y, intercept)
@@ -243,8 +168,30 @@ def estimate_plane():
     ax.legend()
     plt.savefig("/home/heda/zyy/dataset/phantom3_village-kfs/plane_est.jpg")
     # plt.show()
+    return slope_x, slope_y, intercept
+
+def transform_plane(a, b, c):
+    # 定义相机坐标系下的平面法向量n和偏移量d
+    n_w = np.array([a, b, -1]) 
+    d_w = c
     
-if __name__ == '__main__':
+    Rgw = np.array([[189.89378, -32.741219, -11.53664],
+                  [-33.016323, -190.15886, -3.775918],
+                  [-10.723987, 5.6875081, -192.65871]])
+    tgw = np.array([-4.5524707, 259.5463, 165.73451])
+    
+    n_g = Rgw @ n_w
+    d_g = d_w - np.dot(n_g, tgw)
+    
+    # 输出地图坐标系下的平面方程
+    print("地图坐标系下的平面方程为: {}x + {}y + {}z + {} = 0".format(n_g[0], n_g[1], n_g[2], d_g))
+    slope_x = -n_g[0] / n_g[2]
+    slope_y = -n_g[1] / n_g[2]
+    intercept = -d_g / n_g[2]
+    plane_to_SE3(slope_x, slope_y, intercept)
+    plane_to_SE3_2(slope_x, slope_y, intercept)
+    
+def verify_quaternion():
     q_pose = np.array([0.999997, -0.00108932, -0.00187957, 0.00144478])
     r_pose = quaternion_to_rotation_matrix(q_pose)
     q_cyc = rotation_matrix_to_quaternion(r_pose)
@@ -263,5 +210,6 @@ if __name__ == '__main__':
     t_plane = r_plane.T @ t_pose.T
     print("t_plane: ", t_plane)
     
-    
-    
+if __name__ == '__main__':
+    a, b, d = estimate_plane()
+    transform_plane(a, b, d)

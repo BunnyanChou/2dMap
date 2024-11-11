@@ -43,12 +43,12 @@ class Map2DCPU:public Map2D,public pi::Thread
 
     struct Map2DCPUData//change when spread and prepare
     {
-        Map2DCPUData():_w(0),_h(0){}
+        Map2DCPUData():_w(0),_h(0),_minIntx(0),_minInty(0){}
         Map2DCPUData(double eleSize_,double lengthPixel_,pi::Point3d max_,pi::Point3d min_,
-                     int w_,int h_,const std::vector<SPtr<Map2DCPUEle> >& d_)
+                     int w_,int h_, int minIntx_, int minInty_, const std::vector<SPtr<Map2DCPUEle> >& d_)
             :_eleSize(eleSize_),_eleSizeInv(1./eleSize_),
               _lengthPixel(lengthPixel_),_lengthPixelInv(1./lengthPixel_),
-              _min(min_),_max(max_),_w(w_),_h(h_),_data(d_){}
+              _min(min_),_max(max_),_w(w_),_h(h_),_minIntx(minIntx_),_minInty(minInty_),_data(d_){}
 
         bool   prepare(SPtr<Map2DCPUPrepare> prepared);// only done Once!
 
@@ -60,6 +60,8 @@ class Map2DCPU:public Map2D,public pi::Thread
         const pi::Point3d& max()const{return _max;}
         const int w()const{return _w;}
         const int h()const{return _h;}
+        const int minIntx()const{return _minIntx;}
+        const int minInty()const{return _minInty;}
 
         std::vector<SPtr<Map2DCPUEle> > data()
         {pi::ReadMutex lock(mutexData);return _data;}
@@ -80,6 +82,7 @@ class Map2DCPU:public Map2D,public pi::Thread
         double      _eleSize, _lengthPixel, _eleSizeInv, _lengthPixelInv;
         pi::Point3d _max,_min;
         int         _w,_h;
+        int _minIntx, _minInty;
         std::vector<SPtr<Map2DCPUEle>>  _data;
         pi::MutexRW mutexData;
     };
@@ -96,6 +99,7 @@ public:
     virtual bool feed(cv::Mat img,const pi::SE3d& pose);//world coordinate
 
     // virtual void draw();
+    virtual bool drawFrame(cv::Mat &stitchImage);
 
     virtual bool save(const std::string& filename);
 
@@ -117,9 +121,9 @@ private:
     SPtr<Map2DCPUPrepare>             prepared;
     SPtr<Map2DCPUData>                data;
     pi::MutexRW                       mutex;
-
     bool                              _valid, _thread, _changed;
     cv::Mat                           weightImage;
+    // cv::Mat                           stitchImage;
     // int&                              alpha;
     int                              alpha;
 };

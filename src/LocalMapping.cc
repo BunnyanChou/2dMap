@@ -84,6 +84,8 @@ void LocalMapping::Run()
                         // Optimizer::AlignGPSImage(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                         // Optimizer::AlignGPSImageUmeyama(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                         Optimizer::LocalBundleAdjustmentGPS(mpCurrentKeyFrame, &mbAbortBA, mpMap);
+                        // Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
+                        // Optimizer::AlignGPSImageUmeyama(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                     } else {
                         Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                     }                   

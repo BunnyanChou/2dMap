@@ -219,12 +219,12 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
     
     std::cout << "*******umeyama**************" << std::endl;
     Eigen2::Matrix3x4d m = Tgps_w.ToMatrix();
-        cv::Mat cvMat = cv::Mat::eye(4,4,CV_32F);
-        for(int i=0;i<3;i++) {
-            for(int j=0; j<4; j++) {
-                cvMat.at<float>(i,j)=m(i,j);
-            }     
+    cv::Mat cvMat = cv::Mat::eye(4,4,CV_32F);
+    for(int i=0;i<3;i++) {
+        for(int j=0; j<4; j++) {
+            cvMat.at<float>(i,j)=m(i,j);
         }
+    }
     std::cout << "tgsp_from_w: " << cvMat << std::endl;
     std::cout << "scale " << Tgps_w.scale << std::endl;
     std::cout << "r " << Tgps_w.rotation.toRotationMatrix() << std::endl;
@@ -237,6 +237,7 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
         std::cout << "pKF tO: " << pKF->GetCameraCenter() << std::endl;
         std::cout << "gps est: " << dst_transformed << std::endl;
         std::cout << "gps: " << pKF->Tgpsc.rowRange(0, 3).col(3) << std::endl;
+        pKF->Tgps_from_w = cvMat;
     }
 }
 
@@ -615,7 +616,7 @@ void Optimizer::LocalBundleAdjustmentGPS(KeyFrame *pKF, bool* pbStopFlag, Map* p
         tgt_tgps.push_back(Converter::toVector3d(pKFi->Tgpsc.rowRange(0, 3).col(3)));
     }
 
-    Sim3d Tgps_w;
+    Sim3d Tgps_w; // 坐标系之间的七参数变换矩阵
     EstimateSim3d(src_tw, tgt_tgps, Tgps_w);
 
     g2o::Sim3 Tgps_w_init = g2o::Sim3(Tgps_w.rotation, Tgps_w.translation, Tgps_w.scale);
