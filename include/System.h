@@ -79,7 +79,7 @@ public:
     // Returns the camera pose (empty if tracking fails).
     cv::Mat TrackMonocular(const cv::Mat &im, const double &timestamp);
 
-    cv::Mat TrackMonocularGPS(const cv::Mat &im, const vector<double> &gps, const double &timestamp);
+    cv::Mat TrackMonocularGPS(const cv::Mat &im, const vector<double> &gps, const double &timestamp, cv::Mat &Tgpsw, float &scale);
 
     // This stops local mapping thread (map building) and performs only camera tracking.
     void ActivateLocalizationMode();

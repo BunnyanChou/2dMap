@@ -47,7 +47,7 @@ Frame::Frame(const Frame &frame)
      mpReferenceKF(frame.mpReferenceKF), mnScaleLevels(frame.mnScaleLevels),
      mfScaleFactor(frame.mfScaleFactor), mfLogScaleFactor(frame.mfLogScaleFactor),
      mvScaleFactors(frame.mvScaleFactors), mvInvScaleFactors(frame.mvInvScaleFactors),
-     mvLevelSigma2(frame.mvLevelSigma2), mvInvLevelSigma2(frame.mvInvLevelSigma2), mTgpsc(frame.mTgpsc), mTgps_from_w(frame.mTgps_from_w),
+     mvLevelSigma2(frame.mvLevelSigma2), mvInvLevelSigma2(frame.mvInvLevelSigma2), mTgpsc(frame.mTgpsc), mTgps_from_w(frame.mTgps_from_w), mScale(frame.mScale),
      mTw_from_gps(frame.mTw_from_gps)
 {
     for(int i=0;i<FRAME_GRID_COLS;i++)
@@ -229,9 +229,9 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 }
 
 Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
-    const std::vector<double> &vGps, const cv::Mat &Tgps_from_w)
+    const std::vector<double> &vGps, const cv::Mat &Tgps_from_w, const float scale)
     :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
-     mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), gps(vGps), mTgps_from_w(Tgps_from_w)
+     mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), gps(vGps), mTgps_from_w(Tgps_from_w), mScale(scale)
 {
     // Frame ID
     mnId=nNextId++;

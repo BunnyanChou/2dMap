@@ -12,6 +12,7 @@
 #include "Converter.h"
 #include "SE3.h"
 #include "Converter.h"
+
 using namespace std;
 
 void LoadImages(const string &strFile, vector<string> &vstrImageFilenames,
@@ -23,6 +24,7 @@ void InputGPS(const string &strFile, std::map<std::string, vector<double>>& imgG
 bool obtainFrame(const cv::Mat im, const cv::Mat Twc, std::pair<cv::Mat, pi::SE3d>& frame);
 
 void SaveTrajectoryGPS(std::vector<cv::Mat> pose, std::string filename);
+int getTransformPlane(const cv::Mat& Tgpsw, const float scale, pi::SE3d &plane_t);
 
 int main(int argc, char **argv)
 {
@@ -88,8 +90,9 @@ int main(int argc, char **argv)
     cv::Mat im, map2dcv;
 
     std::vector<cv::Mat> resultGPS;
-    int firstIdx = 0;
-    int slamInitialized = false;
+    cv::Mat Tgpsw = cv::Mat::eye(4, 4, CV_32F);
+    float scale = 1.;
+    pi::SE3d plane = pi::SE3d(0,0,1,0,0,0,1);
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image from file
@@ -118,14 +121,8 @@ int main(int argc, char **argv)
 
         // Pass the image to the SLAM system
         // cv::Mat Tcw = SLAM.TrackMonocular(im, tframe);
-        cv::Mat Tcw = SLAM.TrackMonocularGPS(im, gps, tframe);
-        if (!Tcw.empty()) {
-            if (!slamInitialized) {
-                slamInitialized = true;
-                firstIdx = ni;
-            }
-            
-            std::cout << "translation: " << Tcw.at<float>(0,3) << Tcw.at<float>(1,3) << Tcw.at<float>(2,3) << std::endl;
+        cv::Mat Tcw = SLAM.TrackMonocularGPS(im, gps, tframe, Tgpsw, scale);
+        if (!Tcw.empty()) {   
             resultGPS.push_back(Tcw);
         }
 
@@ -139,8 +136,14 @@ int main(int argc, char **argv)
 
         // 图像拼接
         // 前20张图片，加入到frame中去    
-        if (ni < (firstIdx + 2)) {
+        if((scale - 1.)< 1.e-6) { // 在gps坐标系下，scale一定会大于1
             continue;
+        } else {
+            if (abs(plane.get_translation().z - 1) < 1.e-6) { // 在没有转换到gps之前，z=1，转换之后，z很大，只需要转一次
+                if(getTransformPlane(Tgpsw, scale, plane)) {
+                    return 1;
+                }
+            }   
         }
         if (!Tcw.empty() && ni < 20) {
             std::pair<cv::Mat,pi::SE3d> frame;
@@ -156,7 +159,7 @@ int main(int argc, char **argv)
                 std::pair<cv::Mat,pi::SE3d> frame;
                 (void)obtainFrame(im, Tcw, frame);
                 frames.push_back(frame);
-                map->prepare(pi::SE3d(), PinHoleParameters(im.cols, im.rows, fx, fy, cx, cy), frames);
+                map->prepare(plane, PinHoleParameters(im.cols, im.rows, fx, fy, cx, cy), frames);
                 map_initialized = true;
                 std::cout << "map_repare done." << std::endl;
             } else {
@@ -376,14 +379,61 @@ bool obtainFrame(const cv::Mat im, const cv::Mat Tcw, std::pair<cv::Mat, pi::SE3
     cv::Mat mRwc = Tcw.rowRange(0,3).colRange(0,3);
     cv::Mat mtwc = Tcw.rowRange(0,3).col(3);
 
-    std::cout << "mRwc: " << mRwc << std::endl;
-    std::cout << "mtwc: " << mtwc << std::endl;
-
     Eigen::Matrix<double,3,3> eigMat = ORB_SLAM2::Converter::toMatrix3d(mRwc);
     Eigen::Quaterniond r(eigMat);
 
     frame.first = im;
     frame.second = pi::SE3d(mtwc.at<float>(0), mtwc.at<float>(1), mtwc.at<float>(2), r.x(), r.y(), r.z(), r.w());
-    std::cout << mtwc.at<float>(0) << "," << mtwc.at<float>(1) << "," << mtwc.at<float>(2) << "," << r.x() << "," << r.y() << "," << r.z() << "," << r.w() << std::endl;
     return true;
+}
+
+int getTransformPlane(const cv::Mat& Tgpsw, const float scale, pi::SE3d &plane_t) {
+    if (Tgpsw.empty()) {
+        std::cout << "The transformation matrix from world to GPS is wrong" << std::endl;
+        return 1;
+    }
+    // step1: 把平面旋转到GPS坐标系下
+    Eigen::Matrix<double,3,3> Rgpsw = ORB_SLAM2::Converter::toMatrix3d(Tgpsw.rowRange(0,3).colRange(0,3));
+    Eigen::Matrix<double,3,1> tgpsw = ORB_SLAM2::Converter::toVector3d(Tgpsw.rowRange(0,3).col(3));
+
+    Eigen::Matrix<double,3,1> n_w(0., 0., 1.); // 平面的初始法向量
+    Eigen::Matrix<double,3,1> dn_w(0., 0., 1.); // 
+
+    Eigen::Matrix<double,3,1> n_gps = Rgpsw * n_w;
+    Eigen::Matrix<double,3,1> dn_gps = Rgpsw * dn_w + tgpsw;
+    // 平面法向量和平面上点的点积，得到平面参数d_gps
+    double d_gps = n_gps.dot(dn_gps);
+
+    d_gps = d_gps / n_gps(2);
+    n_gps = n_gps.array() / n_gps(2);
+    
+    // Step2: 把平面参数转化为SE3
+    Eigen::Matrix<double,3,1> n_gps_norm = n_gps.normalized();
+    Eigen::Matrix<double,3,1> t = d_gps * n_gps_norm;
+
+    Eigen::Matrix<double,3,1> z_axis(0., 0., 1.);
+    Eigen::Matrix<double,3,1> v = z_axis.cross(n_gps_norm);
+    double s = v.norm();
+    double c = z_axis.dot(n_gps_norm);
+
+    Eigen::Matrix3d vx;
+    vx << 0, -v(2), v(1),
+          v(2), 0, -v(0),
+          -v(1), v(0), 0;
+
+    Eigen::Matrix3d R_matrix;
+    if (s != 0) {
+        R_matrix = Eigen::Matrix3d::Identity() + vx + vx * vx * ((1 - c) / (s * s));
+    } else {
+        R_matrix = Eigen::Matrix3d::Identity(); // 若法向量与 z 轴平行，则直接用单位矩阵
+    }
+
+    Eigen::Quaterniond quaternion(R_matrix);
+    pi::SE3d Tgps(t(0), t(1), t(2), quaternion.x(), quaternion.y(), quaternion.z(), quaternion.w());
+
+    plane_t = Tgps;
+    std::cout << "Estimating the plane done." << std::endl;
+    std::cout << "Plane parameter：" << n_gps.transpose() << ", " << d_gps << std::endl;
+    std::cout << "                 " << plane_t << std::endl;
+    return 0;
 }

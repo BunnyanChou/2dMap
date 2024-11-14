@@ -107,10 +107,9 @@ Map2DCPU::Map2DCPU(bool thread)
 {
 }
 
-bool Map2DCPU::prepare(const pi::SE3d& plane1,const PinHoleParameters& camera,
+bool Map2DCPU::prepare(const pi::SE3d& plane,const PinHoleParameters& camera,
                 const std::deque<std::pair<cv::Mat,pi::SE3d> >& frames)
 {
-    pi::SE3d plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0); // 0.33, -0.038, 0.997, 0.0, 0.0, 0.99998, 0.00609 x, y, z, qx, qy, qz,qw
     //insert frames
     SPtr<Map2DCPUPrepare> p(new Map2DCPUPrepare);
     SPtr<Map2DCPUData>    d(new Map2DCPUData);

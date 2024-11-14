@@ -191,6 +191,7 @@ public:
 
     cv::Mat Tgpsc;
     cv::Mat Tgps_from_w;
+    float scale = 1.;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:

@@ -45,7 +45,7 @@ struct Map2DPrepare//change when prepare
     uint queueSize(){pi::ReadMutex lock(mutexFrames);
                   return _frames.size();}
 
-    bool prepare(const pi::SE3d& plane,const PinHoleParameters& camera,
+    bool prepare(const pi::SE3d& plane, const PinHoleParameters& camera,
                  const std::deque<std::pair<cv::Mat,pi::SE3d> >& frames);
 
     pi::Point2d Project(const pi::Point3d& pt) // 一个点从相机坐标系到图像坐标系
@@ -67,10 +67,15 @@ struct Map2DPrepare//change when prepare
         return _frames;
     }
 
+    bool getPlaneGPS();
+
     PinHoleParameters                        _camera;
     double                                   _fxinv, _fyinv;
     pi::SE3d                                 _plane;//all fixed
-    std::deque<std::pair<cv::Mat,pi::SE3d> > _frames;//camera coordinate
+    std::deque<std::pair<cv::Mat,pi::SE3d>> _frames;//camera coordinate
+    std::deque<std::pair<cv::Mat,pi::SE3d>> _frames_gps;
+    pi::SE3d                                _Tgpsw;
+    pi::SE3d                                _plane_gps;
     pi::MutexRW                              mutexFrames;
 };
 

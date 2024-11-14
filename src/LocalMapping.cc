@@ -28,6 +28,24 @@
 namespace ORB_SLAM2
 {
 
+bool isIdentityMatrix(const cv::Mat& mat, double epsilon = 1e-6) {
+    // 检查是否是 4x4 的单通道浮点矩阵
+    if (mat.rows != 4 || mat.cols != 4 || mat.type() != CV_32F) {
+        return false;
+    }
+    
+    // 创建一个 4x4 的单位矩阵
+    cv::Mat identity = cv::Mat::eye(4, 4, CV_32F);
+
+    // 计算输入矩阵与单位矩阵的差的最大值
+    cv::Mat diff;
+    cv::absdiff(mat, identity, diff);
+    double maxDiff = cv::norm(diff, cv::NORM_INF);
+
+    // 判断最大差值是否在容差范围内
+    return maxDiff < epsilon;
+}
+
 LocalMapping::LocalMapping(Map *pMap, const float bMonocular, const int sensor):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
     mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true), mSensor(sensor)
@@ -83,9 +101,12 @@ void LocalMapping::Run()
                         // Optimizer::AlignGPSImageCeres(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                         // Optimizer::AlignGPSImage(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                         // Optimizer::AlignGPSImageUmeyama(mpCurrentKeyFrame,&mbAbortBA, mpMap);
-                        Optimizer::LocalBundleAdjustmentGPS(mpCurrentKeyFrame, &mbAbortBA, mpMap);
-                        // Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
-                        // Optimizer::AlignGPSImageUmeyama(mpCurrentKeyFrame,&mbAbortBA, mpMap);
+                        // Optimizer::LocalBundleAdjustmentGPS(mpCurrentKeyFrame, &mbAbortBA, mpMap);
+                        Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
+                        if (isIdentityMatrix(mpCurrentKeyFrame->Tgps_from_w)) { // 只进行初始化操作
+                            Optimizer::AlignGPSImageUmeyama(mpCurrentKeyFrame,&mbAbortBA, mpMap);
+                        }
+                        
                     } else {
                         Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
                     }                   

@@ -28,7 +28,8 @@
 #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
-#include<Eigen/StdVector>
+#include <Eigen/StdVector>
+#include <Eigen/Dense>
 
 #include "Converter.h"
 #include "SimilarityTransform.h"
@@ -168,6 +169,10 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
             lLocalKeyFrames.push_back(pKFi);
     }
 
+    if (lLocalKeyFrames.size() < 6) {
+        return;
+    }
+
     // Local MapPoints seen in Local KeyFrames
     list<MapPoint*> lLocalMapPoints;
     for(list<KeyFrame*>::iterator lit=lLocalKeyFrames.begin() , lend=lLocalKeyFrames.end(); lit!=lend; lit++)
@@ -217,7 +222,7 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
     Sim3d Tgps_w;
     EstimateSim3d(src_tw, tgt_tgps, Tgps_w);
     
-    std::cout << "*******umeyama**************" << std::endl;
+    std::cout << "Estimating the transformatin from world to GPS using umeyama..." << std::endl;
     Eigen2::Matrix3x4d m = Tgps_w.ToMatrix();
     cv::Mat cvMat = cv::Mat::eye(4,4,CV_32F);
     for(int i=0;i<3;i++) {
@@ -225,10 +230,9 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
             cvMat.at<float>(i,j)=m(i,j);
         }
     }
-    std::cout << "tgsp_from_w: " << cvMat << std::endl;
-    std::cout << "scale " << Tgps_w.scale << std::endl;
-    std::cout << "r " << Tgps_w.rotation.toRotationMatrix() << std::endl;
-    std::cout << "t " << Tgps_w.translation << std::endl;
+    std::cout << "scale: " << Tgps_w.scale << std::endl;
+    std::cout << "r: " << Tgps_w.rotation.toRotationMatrix() << std::endl;
+    std::cout << "t: " << Tgps_w.translation.transpose() << std::endl;
     for(list<KeyFrame*>::iterator lit=lLocalKeyFrames.begin(), lend=lLocalKeyFrames.end(); lit!=lend; lit++)
     {
         KeyFrame* pKF = *lit;
@@ -238,6 +242,7 @@ void Optimizer::AlignGPSImageUmeyama(KeyFrame *pKF, bool* pbStopFlag, Map* pMap)
         std::cout << "gps est: " << dst_transformed << std::endl;
         std::cout << "gps: " << pKF->Tgpsc.rowRange(0, 3).col(3) << std::endl;
         pKF->Tgps_from_w = cvMat;
+        pKF->scale = Tgps_w.scale;
     }
 }
 
@@ -787,6 +792,9 @@ void Optimizer::LocalBundleAdjustmentGPS(KeyFrame *pKF, bool* pbStopFlag, Map* p
     // Recover optimized data
     g2o::VertexSim3Expmap* vSim3 = static_cast<g2o::VertexSim3Expmap*>(optimizer.vertex(maxPointid + 1));
     g2o::Sim3 mTsim3 = vSim3->estimate();
+    std::cout << "scale: " << mTsim3.scale() << std::endl;
+    std::cout << "rotation: " << mTsim3.rotation().toRotationMatrix() << std::endl;
+    std::cout << "translation: " << mTsim3.translation() << std::endl;
 
     std::cout << "get Tgps_from_w done" << Converter::toCvMat(mTsim3) << std::endl;
     //Keyframes

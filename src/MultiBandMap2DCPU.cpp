@@ -219,7 +219,7 @@ bool MultiBandMap2DCPU::MultiBandMap2DCPUData::prepare(SPtr<MultiBandMap2DCPUPre
     {
         _max=pi::Point3d(-1e10,-1e10,-1e10);
         _min=-_max;
-        for(std::deque<std::pair<cv::Mat,pi::SE3d> >::iterator it=prepared->_frames.begin();
+        for(std::deque<std::pair<cv::Mat,pi::SE3d>>::iterator it=prepared->_frames.begin();
             it!=prepared->_frames.end();it++)
         {
             pi::SE3d& pose=it->second;
@@ -280,11 +280,11 @@ MultiBandMap2DCPU::MultiBandMap2DCPU(bool thread)
     _bandNum=min(_bandNum, static_cast<int>(ceil(log(ELE_PIXELS) / log(2.0))));
 }
 
-bool MultiBandMap2DCPU::prepare(const pi::SE3d& plane1,const PinHoleParameters& camera,
+bool MultiBandMap2DCPU::prepare(const pi::SE3d& plane,const PinHoleParameters& camera,
                 const std::deque<std::pair<cv::Mat,pi::SE3d> >& frames)
 {
-    pi::SE3d plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
-    // pi::SE3d plane(0., 0., 168.79058776, 0., 0., 0.99964501, 0.02664321);
+    std::cout << "Prepare: Plane: " << plane << std::endl;
+
     //insert frames
     SPtr<MultiBandMap2DCPUPrepare> p(new MultiBandMap2DCPUPrepare);
     SPtr<MultiBandMap2DCPUData>    d(new MultiBandMap2DCPUData);
@@ -411,6 +411,7 @@ bool MultiBandMap2DCPU::renderFrame(const std::pair<cv::Mat,pi::SE3d>& frame)
         xmax=d->min().x+d->eleSize()*xmaxInt;
         ymax=d->min().y+d->eleSize()*ymaxInt;
     }
+
     // 3.prepare weight and warp images
     cv::Mat weight_src;
     if(weightImage.empty()||weightImage.cols!=frame.first.cols||weightImage.rows!=frame.first.rows)

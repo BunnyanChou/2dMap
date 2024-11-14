@@ -117,6 +117,7 @@ public:
 
 
     cv::Mat mTgps_from_w;
+    float mScale = 1.;
 
 protected:
 

@@ -49,21 +49,8 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
 {
     // Load camera parameters from settings file
-    // mTgps_from_w = cv::Mat::eye(4, 4, CV_32F);
-
     mTgps_from_w = cv::Mat::eye(4, 4, CV_32F);
-    // mTgps_from_w.at<float>(0, 0) = -63.69359475;
-    // mTgps_from_w.at<float>(0, 1) = -84.79989696;
-    // mTgps_from_w.at<float>(0, 2) = 43.7069278;
-    // mTgps_from_w.at<float>(0, 3) = 48.2358177;
-    // mTgps_from_w.at<float>(1, 0) = 61.76349222;
-    // mTgps_from_w.at<float>(1, 1) = -76.7064762;
-    // mTgps_from_w.at<float>(1, 2) = -58.81819116;
-    // mTgps_from_w.at<float>(1, 3) = 40.36998343;
-    // mTgps_from_w.at<float>(2, 0) = 72.70893405;
-    // mTgps_from_w.at<float>(2, 1) = -9.12611957;
-    // mTgps_from_w.at<float>(2, 2) = 88.25144149;
-    // mTgps_from_w.at<float>(2, 3) = 0.91970886;
+    mScale = 1.;
 
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
     float fx = fSettings["Camera.fx"];
@@ -299,10 +286,10 @@ cv::Mat Tracking::GrabImageMonocularGPS(const cv::Mat &im, const vector<double> 
     }
 
     if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET) {
-        mCurrentFrame = Frame(mImGray, timestamp, mpIniORBextractor, mpORBVocabulary, mK, mDistCoef, mbf, mThDepth, gps, mTgps_from_w);
+        mCurrentFrame = Frame(mImGray, timestamp, mpIniORBextractor, mpORBVocabulary, mK, mDistCoef, mbf, mThDepth, gps, mTgps_from_w, mScale); // scale
         // mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
     } else {
-        mCurrentFrame = Frame(mImGray, timestamp, mpORBextractorLeft, mpORBVocabulary, mK, mDistCoef, mbf, mThDepth, gps, mTgps_from_w);
+        mCurrentFrame = Frame(mImGray, timestamp, mpORBextractorLeft, mpORBVocabulary, mK, mDistCoef, mbf, mThDepth, gps, mTgps_from_w, mScale);// scale
         // mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
     }
     Track();
@@ -310,17 +297,8 @@ cv::Mat Tracking::GrabImageMonocularGPS(const cv::Mat &im, const vector<double> 
     // return mCurrentFrame.mTcw.clone();
     if (!mCurrentFrame.mTcw.empty()) {
         cv::Mat Tgpsc = mCurrentFrame.GetGPSPose();
-        std::cout << "Tgpsc: " << Tgpsc << std::endl;
+        // std::cout << "Tgpsc: " << Tgpsc << std::endl;
         return Tgpsc;
-        // cv::Mat mRgpsc = Tgpsc.rowRange(0,3).colRange(0,3);
-        // cv::Mat mRcgps = mRgpsc.t();
-        // cv::Mat mtgpsc = Tgpsc.rowRange(0,3).col(3);
-        // cv::Mat mtcgps = -mRgpsc.t() * mtgpsc;
-
-        // cv::Mat mTcgps = cv::Mat::eye(4, 4, CV_32F);;
-        // mRcgps.copyTo(mTcgps.rowRange(0,3).colRange(0,3));
-        // mtcgps.copyTo(mTcgps.rowRange(0,3).col(3));
-        // return mTcgps;
     } else {
         cv::Mat mTcgps;
         return mTcgps;
@@ -564,7 +542,9 @@ void Tracking::Track()
 
         if (mSensor == System::MONOCULAR_GPS) {
             mCurrentFrame.mTgps_from_w = mCurrentFrame.mpReferenceKF->Tgps_from_w.clone();
+            mCurrentFrame.mScale = mCurrentFrame.mpReferenceKF->scale;
             mTgps_from_w = mCurrentFrame.mTgps_from_w;
+            mScale = mCurrentFrame.mScale;
         }           
         mLastFrame = Frame(mCurrentFrame); // 把当前帧设为上一帧，完成track的传递
     }
@@ -581,10 +561,8 @@ void Tracking::Track()
         if(mSensor==System::MONOCULAR_GPS) {
             cv::Mat Rgps_est = mCurrentFrame.GetGPSRotation();
             cv::Mat posgps_est = mCurrentFrame.GetGPSPosition();
-            // std::cout << "mTgps_from_w: " << mTgps_from_w << std::endl;
             std::cout << "camera twc: " << mCurrentFrame.GetCameraCenter() << std::endl;
             std::cout << "mTgps_from_w.R: " << mTgps_from_w.rowRange(0,3).colRange(0,3) << std::endl;
-            // std::cout << "mOw" << mCurrentFrame.mOw << std::endl;
             std::cout << "mTgps_from_w.t: " << mTgps_from_w.rowRange(0,3).col(3) << std::endl;
             std::cout << "after optim. posgps_est: " << posgps_est << std::endl;
             std::cout << "after optim. gps: " << mCurrentFrame.mTgpsc.rowRange(0, 3).col(3) << std::endl;

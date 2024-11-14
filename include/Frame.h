@@ -59,7 +59,7 @@ public:
     Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
     // Constructor for Monocular-GPS cameras.
-    Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<double> &vGps, const cv::Mat &mTgps_from_w);
+    Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth, const std::vector<double> &vGps, const cv::Mat &mTgps_from_w, const float scale);
     // Extract ORB on the image. 0 for left image and 1 for right image.
     void ExtractORB(int flag, const cv::Mat &im);
 
@@ -89,7 +89,7 @@ public:
     }
 
     inline cv::Mat GetGPSRotation(){
-        return mTgps_from_w.rowRange(0,3).colRange(0,3) * mRwc;
+        return mTgps_from_w.rowRange(0,3).colRange(0,3) / mScale * mRwc;
     }
 
     inline cv::Mat GetGPSPose(){
@@ -199,6 +199,7 @@ public:
     cv::Mat mTw_from_gps; // RT slam gps to world coord.
     cv::Mat mRgpsc;
     cv::Mat mtgpsc; // 估计值
+    float mScale = 1.;
 
     // Current and Next Frame id.
     static long unsigned int nNextId;

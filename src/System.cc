@@ -269,7 +269,7 @@ cv::Mat System::TrackMonocular(const cv::Mat &im, const double &timestamp)
     return Tcw;
 }
 
-cv::Mat System::TrackMonocularGPS(const cv::Mat &im, const vector<double> &gps, const double &timestamp)
+cv::Mat System::TrackMonocularGPS(const cv::Mat &im, const vector<double> &gps, const double &timestamp, cv::Mat &Tgpsw, float &scale)
 {
     if(mSensor!=MONOCULAR_GPS)
     {
@@ -317,6 +317,8 @@ cv::Mat System::TrackMonocularGPS(const cv::Mat &im, const vector<double> &gps, 
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
     mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
+    Tgpsw = mpTracker->mCurrentFrame.mTgps_from_w;
+    scale = mpTracker->mCurrentFrame.mScale;
 
     return Tcw;
 }
